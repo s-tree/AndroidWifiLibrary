@@ -1,0 +1,81 @@
+package com.jingxi.smartlife.wifi.library;
+
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiManager;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import io.reactivex.Observable;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.annotations.NonNull;
+import io.reactivex.disposables.Disposable;
+import io.reactivex.functions.Consumer;
+import io.reactivex.functions.Function;
+import io.reactivex.schedulers.Schedulers;
+
+public class WifiScanUtil {
+
+    private static WifiManager mWifiManager;
+    private static Disposable scanSubscription;
+
+    private static int start = 0;
+    private static int maxStep = 10;
+
+    protected static void startScan(final WifiManager wifiManager) {
+        if (WifiUtils.onWifiChangedList == null
+                || WifiUtils.onWifiChangedList.isEmpty()) {
+            return;
+        }
+        cancelScan();
+        mWifiManager = wifiManager;
+        start = 0;
+        scanSubscription = Observable.interval(1, TimeUnit.SECONDS)
+                .observeOn(Schedulers.io())
+                .map(new Function<Long, List<ScanResult>>() {
+                    @Override
+                    public List<ScanResult> apply(@NonNull Long aLong) throws Exception {
+                        return wifiManager.getScanResults();
+                    }
+
+                })
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Consumer<List<ScanResult>>() {
+
+                    @Override
+                    public void accept(List<ScanResult> scanResults) throws Exception {
+                        wifiManager.startScan();
+                        List<WifiUtils.OnWifiChanged> temp = new ArrayList<>(WifiUtils.onWifiChangedList);
+                        for(WifiUtils.OnWifiChanged onWifiChanged : temp){
+                            onWifiChanged.onScanResult(scanResults,start,start >= maxStep);
+                        }
+                        start++;
+                        if (start > maxStep) {
+                            cancelScan();
+                        }
+                    }
+                });
+    }
+
+    protected static void startScanOnce(WifiManager wifiManager){
+        List<WifiUtils.OnWifiChanged> temp = new ArrayList<>(WifiUtils.onWifiChangedList);
+        List<ScanResult> results = wifiManager.getScanResults();
+        for(WifiUtils.OnWifiChanged onWifiChanged : temp){
+            onWifiChanged.onScanResult(results,0,true);
+        }
+    }
+
+    protected static void cancelScan() {
+        if (scanSubscription == null || scanSubscription.isDisposed()) {
+            return;
+        }
+        try {
+            scanSubscription.dispose();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        ;
+        start = 0;
+    }
+}

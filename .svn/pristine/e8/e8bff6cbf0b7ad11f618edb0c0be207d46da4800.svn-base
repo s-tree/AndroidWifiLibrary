@@ -1,0 +1,74 @@
+package com.jingxi.smartlife.wifi.library;
+
+import android.net.wifi.ScanResult;
+import android.net.wifi.WifiManager;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import rx.Observable;
+import rx.Observer;
+import rx.Subscription;
+import rx.android.schedulers.AndroidSchedulers;
+import rx.functions.Func1;
+import rx.schedulers.Schedulers;
+
+public class WifiScanUtil {
+
+    private static WifiManager mWifiManager;
+    private static Subscription scanSubscription;
+
+    private static int start = 0;
+    private static int maxStep = 10;
+
+    protected static void startScan(final WifiManager wifiManager) {
+        if (WifiUtils.onWifiChangedList == null
+                || WifiUtils.onWifiChangedList.isEmpty()) {
+            return;
+        }
+        cancelScan();
+        mWifiManager = wifiManager;
+        start = 0;
+        scanSubscription = Observable.interval(1, TimeUnit.SECONDS)
+                .observeOn(Schedulers.io())
+                .map(new Func1<Long, List<ScanResult>>() {
+                    @Override
+                    public List<ScanResult> call(Long aLong) {
+                        return wifiManager.getScanResults();
+                    }
+                })
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(new Observer<List<ScanResult>>() {
+                    @Override
+                    public void onCompleted() {
+
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+
+                    }
+
+                    @Override
+                    public void onNext(List<ScanResult> scanResults) {
+                        List<WifiUtils.OnWifiChanged> temp = new ArrayList<>(WifiUtils.onWifiChangedList);
+                        for(WifiUtils.OnWifiChanged onWifiChanged : temp){
+                            onWifiChanged.onScanResult(scanResults,start,start >= maxStep);
+                        }
+                        start++;
+                        if (start > maxStep) {
+                            cancelScan();
+                        }
+                    }
+                });
+    }
+
+    protected static void cancelScan() {
+        if (scanSubscription == null || scanSubscription.isUnsubscribed()) {
+            return;
+        }
+        scanSubscription.unsubscribe();
+        start = 0;
+    }
+}

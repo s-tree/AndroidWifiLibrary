@@ -1,0 +1,56 @@
+package com.jingxi.smartlife.wifi.library;
+
+import android.net.wifi.WifiManager;
+
+import java.util.concurrent.TimeUnit;
+
+import rx.Observable;
+import rx.Observer;
+import rx.Subscription;
+import rx.schedulers.Schedulers;
+
+public class WifiScanUtil {
+
+    private static WifiManager mWifiManager;
+    private static Subscription scanSubscription;
+
+    private static int start = 0;
+
+    protected static void startScan(WifiManager wifiManager, final WifiUtils.OnWifiChanged onWifiChanged) {
+        if (onWifiChanged == null) {
+            return;
+        }
+        mWifiManager = wifiManager;
+        start = 0;
+        scanSubscription = Observable.interval(1, TimeUnit.SECONDS)
+                .observeOn(Schedulers.io())
+                .subscribe(new Observer<Long>() {
+                    @Override
+                    public void onCompleted() {
+
+                    }
+
+                    @Override
+                    public void onError(Throwable e) {
+
+                    }
+
+                    @Override
+                    public void onNext(Long aLong) {
+                        onWifiChanged.onScanResult(mWifiManager.getScanResults());
+                        start++;
+                        if (start > 10) {
+                            cancelScan();
+                        }
+                    }
+                });
+    }
+
+    protected static void cancelScan() {
+        if (scanSubscription == null || scanSubscription.isUnsubscribed()) {
+            return;
+        }
+        scanSubscription.unsubscribe();
+        start = 0;
+    }
+}
